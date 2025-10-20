@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Immersive Video Player</title>
+    
+<script src="https://cdn.tailwindcss.com"></script>
+    
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s;
+            /* Disable text selection */
+            -webkit-user-select: none; /* Safari/iOS */
+            -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* IE/Edge */
+            user-select: none; /* Standard */
+            cursor: default; /* Optional: ensures cursor isn't text-selection cursor */
+        }
+        /* Style the file input label (the + icon) nicely. Retains only transition/cursor/flex properties. */
+        .file-input-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            user-select: none;
+            flex-shrink: 0; 
+        }
+        .file-input-label:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .file-input-hidden {
+            display: none;
+        }
+        /* Ensure inputs/buttons still have standard cursors on hover */
+        .file-input-label, button, a {
+            cursor: pointer;
+        }
+        
+        /* Style for Bottom Navigation Items (Mobile only) */
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 4px 8px;
+            color: #6b7280; /* Gray 500 */
+            transition: color 0.2s;
+            flex: 1; /* Distribute space evenly */
+            font-size: 0.75rem; /* text-xs */
+            line-height: 1;
+        }
+        .nav-item:hover, .nav-item.active {
+            color: #ee6912; /* Brand color */
+        }
+        .nav-item svg {
+            width: 24px;
+            height: 24px;
+            margin-bottom: 2px;
+        }
+        
+        /* Custom class for the backdrop effect on desktop */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 40; /* Below sidebar, above main content */
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 300ms;
+        }
+        .sidebar-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* --- MOBILE SLIDE-UP SHEET STYLES --- */
+        .mobile-sheet-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 50; /* Above everything else */
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 300ms ease-in-out;
+        }
+        .mobile-sheet-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .mobile-sheet-panel {
+            transition: transform 300ms ease-out;
+            transform: translateY(100%);
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.2);
+        }
+        .mobile-sheet-panel.active {
+            transform: translateY(0);
+        }
+
+        /* Custom Range Input Styling for Volume/Progress */
+        /* Tailwind classes handle most, but need to ensure range thumb looks good */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; /* Slightly larger thumb for progress bar */
+            height: 14px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            margin-top: -5px; /* Adjust vertical alignment for progress bar */
+        }
+
+        input[type=range]#volumeSlider::-webkit-slider-thumb {
+            width: 12px;
+            height: 12px;
+            margin-top: -4px; /* Adjust vertical alignment for volume slider */
+        }
+
+        /* Ensure controls stay visible when in fullscreen mode */
+        /* Fullscreen state is applied to #playerView element */
+        #playerView:fullscreen video::-webkit-media-controls {
+            display: none !important;
+        }
+        
+        /* Add transition to videoPlayer for smooth rotation */
+        #videoPlayer {
+            transition: transform 0.4s ease-out;
+        }
+    </style>
+</head>
+
+<body class="bg-white text-gray-900 min-h-screen w-full flex flex-col">
+    
+    
+<div id="sidebarBackdrop" class="sidebar-overlay hidden md:block" onclick="toggleRightSidebar()"></div>
+
+    
+<header id="appHeader" class="w-full sticky top-0 z-20 p-4 bg-white/95 backdrop-blur-sm border-b border-gray-200 flex justify-between items-center transition-all duration-300">
+        
+<div class="flex items-center space-x-2">
+            <svg class="h-6 w-6 text-[#ee6912]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/>
+            </svg>
+            <span class="text-xl font-bold text-gray-800">Private Player</span>
+        </div>
+
+        
+<div class="flex items-center space-x-3">
+            
+            
+<a id="donutLinkHeader" href="javascript:void(0)" onclick="showView('donutView')"
+                    class="px-3 py-1.5 text-sm font-medium rounded-full text-white bg-[#ee6912] hover:bg-[#c4540e] transition duration-200 shadow-md transform hover:scale-[1.02] flex items-center"
+                    draggable="false">
+                <span>Buy me a Donut</span>
+            </a>
+
+            
+<div class="flex items-center space-x-3">
+                
+<div id="fileInputContainerHeader">
+                    <input type="file" id="videoFileInput" accept="video/*" class="file-input-hidden" onchange="loadVideo(event)">
+                    
+<label for="videoFileInput" 
+                           class="file-input-label w-11 h-11 rounded-full bg-[#ee6912] text-white shadow-lg hover:bg-[#c4540e]" 
+                           draggable="false">
+                        
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus w-5 h-5">
+                            <path d="M5 12h14"/><path d="M12 5v14"/>
+                        </svg>
+                    </label>
+                </div>
+                
+                
+<button id="hamburgerButton" onclick="toggleRightSidebar()"
+                        class="hidden md:flex w-11 h-11 rounded-full items-center justify-center bg-[#ee6912] text-white shadow-lg hover:bg-[#c4540e] transition duration-200 transform hover:scale-[1.05]"
+                        draggable="false">
+                    
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu w-5 h-5">
+                        <line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            
+<button id="backToPlayerHeaderBtn" onclick="showView('selectionView')" 
+                    class="hidden px-3 py-1.5 text-sm font-medium rounded-full text-white bg-[#ee6912] hover:bg-[#c4540e] transition duration-200 shadow-md transform hover:scale-[1.02] flex items-center space-x-1"
+                    draggable="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left">
+                    <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+                </svg>
+                <span>Back</span>
+            </button>
+        </div>
+    </header>
+
+    
+<main id="appMain" class="flex-grow w-full max-w-7xl mx-auto flex flex-col transition-all duration-300 pb-20 md:pb-0">
+
+        
+<div id="selectionView" class="h-full flex flex-col justify-center items-center text-center p-8 flex-grow">
+            
+            
+<h1 class="text-5xl md:text-7xl font-extrabold leading-tight tracking-tight mb-4 text-gray-900">
+                <span class="block">No one Can see</span>
+                <span class="block">What You're Watching,</span>
+                <span class="block text-[#ee6912]">Not even Us.</span>
+            </h1>
+
+            <p class="text-xl text-gray-600 max-w-xl mx-auto mt-4">
+                Your private videos stay local. Click the **"+" icon** above or the **button below** to select and play your media instantly.
+            </p>
+            
+            
+<button onclick="document.getElementById('videoFileInput').click()" 
+                    class="mt-8 px-8 py-3 bg-[#ee6912] text-white font-semibold rounded-lg shadow-xl hover:bg-[#c4540e] transition duration-200 transform hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-[#ee6912]/50"
+                    draggable="false">
+                Select a video to play
+            </button>
+
+        </div>
+
+        
+<div id="donutView" class="hidden flex flex-col items-center text-center p-8 flex-grow overflow-y-auto">
+            
+            
+<h2 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">
+                <span>Buy Me a Donut</span>
+            </h2>
+
+            
+<div class="mb-8 p-3 bg-gray-100 rounded-full shadow-inner flex items-center space-x-3 text-sm">
+                <label for="currency-selector" class="text-gray-600 font-medium">Select Currency:</label>
+                <select id="currency-selector" onchange="setCurrency(this.value)" class="bg-white border border-gray-300 rounded-full px-3 py-1 text-gray-800 cursor-pointer focus:ring-2 focus:ring-[#ee6912] focus:border-[#ee6912] transition">
+                    <option value="usd">USD ($) - Global</option>
+                    <option value="inr">INR (₹) - India</option>
+                </select>
+            </div>
+
+            
+<div class="max-w-3xl text-lg text-gray-700 space-y-6 text-left w-full">
+                <p>Thank you for using the video player. It really means a lot that you're here.</p>
+                <p>I created this app to make things easier, and I'm committed to keeping it completely free for everyone. **That's a promise.**</p>
+
+                
+<div id="donationButtons" class="flex flex-wrap justify-center gap-3 py-6">
+                    
+                    
+<div id="usdButtons" class="hidden flex-wrap justify-center gap-3">
+                        <a href="#" class="bg-[#060b30] text-white px-6 py-3 rounded-full shadow-lg hover:bg-gray-800 transition duration-200 transform hover:scale-[1.02] font-semibold text-lg" draggable="false">$5</a>
+                        <a href="#" class="bg-[#060b30] text-white px-6 py-3 rounded-full shadow-lg hover:bg-gray-800 transition duration-200 transform hover:scale-[1.02] font-semibold text-lg" draggable="false">$10</a>
+                        <a href="#" class="bg-[#060b30] text-white px-6 py-3 rounded-full shadow-lg hover:bg-gray-800 transition duration-200 transform hover:scale-[1.02] font-semibold text-lg" draggable="false">$15</a>
+                        <a href="#" class="bg-gray-300 text-gray-900 px-6 py-3 rounded-full shadow-lg hover:bg-gray-400 transition duration-200 transform hover:scale-[1.02] font-semibold text-lg" draggable="false">Custom</a>
+                    </div>
+
+                    
+<div id="inrButtons" class="hidden flex-wrap justify-center gap-3">
+                        <a href="#" class="bg-[#060b30] text-white px-6 py-3 rounded-full shadow-lg hover:bg-gray-800 transition duration-200 transform hover:scale-[1.02] font-semibold text-lg" draggable="false">₹200</a>
+                        <a href="#" class="bg-[#060b30] text-white px-6 py-3 rounded-full shadow-lg hover:bg-gray-800 transition duration-200 transform hover:scale-[1.02] font-semibold text-lg" draggable="false">₹500</a>
+                        <a href="#" class="bg-[#060b30] text-white px-6 py-3 rounded-full shadow-lg hover:bg-gray-800 transition duration-200 transform hover:scale-[1.02] font-semibold text-lg" draggable="false">₹1000</a>
+                        <a href="#" class="bg-gray-300 text-gray-900 px-6 py-3 rounded-full shadow-lg hover:bg-gray-400 transition duration-200 transform hover:scale-[1.02] font-semibold text-lg" draggable="false">Custom</a>
+                    </div>
+                </div>
+                
+                <p>If the app has been helpful to you and you'd like to show your support, I'd be incredibly grateful. Your contribution helps keep everything running smoothly and allows me to continue improving the experience for everyone.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">How your support helps</h3>
+                <p>Every donation goes directly toward maintaining the servers, developing new features, and ensuring the app stays fast and reliable. It gives me the freedom to focus on making this better for you, without needing to add ads or charge for features.</p>
+                <p class="font-bold italic">Plus, it keeps me fueled during those late-night coding sessions – **donuts included!**</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">No obligation at all</h3>
+                <p>Please don't feel any pressure. If you're enjoying the app, that's wonderful and that's enough. Sharing it with friends who might find it useful is also a beautiful way to help.</p>
+                
+                <p class="pt-6 font-semibold text-[#ee6912]">Thank you so much for being part of this journey. Whether you support or simply use the app, I appreciate you.</p>
+                <p class="font-semibold text-gray-900">Take care!</p>
+                
+<p class="text-gray-600 font-mono text-base">Muneer Iqbal</p>
+            </div>
+        </div>
+
+        
+<div id="termsView" class="hidden flex flex-col items-center text-center p-8 flex-grow overflow-y-auto">
+            <h2 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">Terms of Service</h2>
+            <p class="text-sm text-gray-500 mb-6">Effective Date: 20th October 2025</p>
+            <div class="max-w-3xl text-lg text-gray-700 space-y-6 text-left w-full">
+                <p>Welcome to **Private Player**! By using this Service, you agree to the following terms. Please read carefully.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">1. Local Playback Only</h3>
+                <p>All video playback occurs entirely on your device.</p>
+                <p>The Service does not upload, transmit, or store your videos anywhere.</p>
+                <p>Your video files remain private — we cannot see or access them.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">2. Usage</h3>
+                <p>The player is provided for personal, non-commercial use.</p>
+                <p>You may use the Service to play videos you legally own or have the right to access.</p>
+                <p>You must not use the Service to play content that violates copyright or any laws.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">3. No Accounts or Tracking</h3>
+                <p>No registration or login is required.</p>
+                <p>The Service does not collect personal data, usage history, or any analytics.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">4. Security Disclaimer</h3>
+                <p>While your videos remain local, always ensure your device is secure.</p>
+                <p>We are not responsible for device-level issues, malware, or corrupted files.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">5. Liability</h3>
+                <p>The Service is provided “as-is” without warranties.</p>
+                <p>We are not liable for any loss, damage, or copyright claims resulting from your use.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">6. Updates</h3>
+                <p>We may update the player periodically. Continued use indicates acceptance of any changes.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">7. Governing Law</h3>
+                <p>These Terms are governed by the laws of India. Any disputes will be resolved in the courts of **Jammu & Kashmir**.</p>
+            </div>
+        </div>
+
+        
+<div id="privacyView" class="hidden flex flex-col items-center text-center p-8 flex-grow overflow-y-auto">
+            <h2 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">Privacy Policy</h2>
+            <p class="text-sm text-gray-500 mb-6">Effective Date: 20th October 2025</p>
+            <div class="max-w-3xl text-lg text-gray-700 space-y-6 text-left w-full">
+                <p>Your privacy is fully respected. Here’s how we handle data:</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">1. No Personal Data Collection</h3>
+                <p>The Service does not collect, store, or transmit any personal information.</p>
+                <p>All playback occurs on your device; nothing leaves your system.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">2. Local Files Only</h3>
+                <p>Videos you play remain on your device or wherever you host them.</p>
+                <p>We cannot see, track, or analyze your videos.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">3. No Tracking</h3>
+                <p>The Service does not use cookies, analytics, or external tracking.</p>
+                <p>You are fully in control of your data and playback activity.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">4. Security</h3>
+                <p>Your privacy depends on the security of your own device.</p>
+                <p>Always maintain updated software and secure your files.</p>
+
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">5. Updates</h3>
+                <p>Privacy practices may be updated occasionally. Since we do not collect any data, these changes are typically informational.</p>
+            </div>
+        </div>
+
+        
+<div id="contactView" class="hidden flex flex-col items-center text-center p-8 flex-grow overflow-y-auto">
+            <h2 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">Contact Us</h2>
+            <div class="max-w-3xl text-lg text-gray-700 space-y-6 text-left w-full">
+                <p>We're here to help! If you have any questions, feedback, or need support, please reach out.</p>
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">General Inquiries & Feedback</h3>
+                <p>Email us at: <a href="mailto:support@privateplayer.com" class="text-[#ee6912] hover:underline font-medium">support@privateplayer.com</a></p>
+                <p>We try to respond to all inquiries within 48 hours.</p>
+                <h3 class="text-2xl font-bold text-gray-900 pt-4">Bug Reports</h3>
+                <p>If you encounter any bugs, please include your operating system and browser version for the fastest resolution.</p>
+                <p class="pt-6 text-sm text-gray-500">Thank upou for helping us improve!</p>
+            </div>
+        </div>
+        
+        
+<div id="playerView" class="hidden h-screen w-screen absolute top-0 left-0 bg-black z-30 flex flex-col">
+            
+            
+<video id="videoPlayer" class="absolute inset-0 w-full h-full object-contain" autoplay></video>
+
+            <!-- Top Control Bar: Title, PiP, Fullscreen, Subtitles (Z-index 40) -->
+            <div id="topControls" class="absolute inset-x-0 top-0 p-4 pb-8 md:pb-12 bg-gradient-to-b from-black/80 to-transparent z-40 transition-opacity duration-300 flex justify-between items-center">
+                
+                <!-- Left: Back Button & Title -->
+                <div class="flex items-center space-x-3">
+                    <button id="backButton" onclick="backToSelection()" class="flex items-center space-x-1 text-white hover:text-gray-200 transition font-medium px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 shadow-lg" draggable="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left">
+                            <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+                        </svg>
+                        <span>Back</span>
+                    </button>
+                    <!-- Video Name -->
+                    <span id="videoTitle" class="text-white text-lg font-semibold truncate max-w-[200px] md:max-w-md"></span>
+                </div>
+                
+                <!-- Right: Settings/Options -->
+                <div class="flex items-center space-x-2">
+                    
+                    <!-- Subtitle/Captions Input & Button -->
+                    <input type="file" id="captionFileInput" accept=".vtt" class="file-input-hidden" onchange="loadCaptions(event)">
+                    <button id="captionBtn" onclick="document.getElementById('captionFileInput').click()" class="p-2 rounded-full bg-white/20 hover:bg-white/30 transition text-white" title="Load Subtitles" draggable="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-closed-captioning"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M8 10h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H8v2"/><path d="M15 10h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-2v2"/></svg>
+                    </button>
+                    
+                    <!-- PiP Button -->
+                    <button id="pipBtn" onclick="togglePictureInPicture()" class="p-2 rounded-full bg-white/20 hover:bg-white/30 transition text-white disabled:opacity-50" title="Picture-in-Picture" disabled draggable="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-stack"><path d="M10 3H6a2 2 0 0 0-2 2v4"/><path d="M14 21h4a2 2 0 0 0 2-2v-4"/><path d="M18 10h-2c-1.7 0-3-1.3-3-3V3"/><path d="M6 14v2c0 1.7 1.3 3 3 3h2"/></svg>
+                    </button>
+                    
+                    <!-- Rotate Button -->
+                    <button id="rotateBtn" onclick="rotateVideo()" class="p-2 rounded-full bg-white/20 hover:bg-white/30 transition text-white" title="Rotate Video" draggable="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-cw"><path d="M4.1 12.8a9 9 0 1 0 0-5.6l-2 2"/><path d="M3 10V6h4"/></svg>
+                    </button>
+                    
+                    <!-- Fullscreen Button -->
+                    <button id="fullscreenBtn" onclick="toggleFullscreen()" class="p-2 rounded-full bg-white/20 hover:bg-white/30 transition text-white" title="Fullscreen" draggable="false">
+                        <svg id="fullscreenIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+                        <svg id="fullscreenExitIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-minimize hidden"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M16 3v3a2 2 0 0 0 2 2h3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/><path d="M8 21v-3a2 2 0 0 0-2-2H3"/></svg>
+                    </button>
+                </div>
+            </div>
+            
+            
+<div id="customControls" class="absolute inset-x-0 bottom-0 p-4 pt-8 md:pt-12 bg-gradient-to-t from-black/80 to-transparent z-40 transition-opacity duration-300">
+                
+                
+<input id="progressBar" type="range" min="0" max="100" value="0" step="0.1" class="w-full h-2 appearance-none bg-white/30 rounded-full cursor-pointer">
+
+                
+<div class="flex justify-between items-center text-white mt-4">
+                    
+                    
+<div class="flex items-center space-x-2 md:space-x-4">
+                        <button id="playPauseBtn" onclick="togglePlayPause()" class="p-2 rounded-full bg-white/20 hover:bg-white/30 transition text-white" title="Play/Pause" draggable="false">
+                            
+                            <svg id="playIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            <svg id="pauseIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pause hidden"><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></svg>
+                        </button>
+                        
+                        <button id="stopBtn" onclick="stopVideo()" class="p-2 rounded-full bg-white/20 hover:bg-white/30 transition text-white" title="Stop" draggable="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                        </button>
+
+                        
+                        <div class="flex items-center space-x-2">
+                            <button id="muteBtn" onclick="toggleMute()" class="p-2 rounded-full hover:bg-white/20 transition text-white" title="Mute/Unmute" draggable="false">
+                                <svg id="volumeHighIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-2"><polygon points="15.5 8 18 10.5 18 13.5 15.5 16 9 16 9 8 15.5 8"/><path d="M19 12a7 7 0 0 0 2 4"/><path d="M19 12a7 7 0 0 1 2-4"/></svg>
+                                <svg id="volumeMuteIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-x hidden"><path d="M11 5L6 9H2v6h4l5 4z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>
+                            </button>
+                            <input id="volumeSlider" type="range" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)" class="w-16 md:w-20 h-1 appearance-none bg-white/30 rounded-full cursor-pointer [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:appearance-none [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:border-0">
+                        </div>
+                    </div>
+
+                    
+                    <div id="timeDisplay" class="text-sm font-mono tracking-wider hidden md:block">00:00 / 00:00</div>
+                    
+                    
+<div class="flex items-center space-x-2 md:space-x-4">
+                        
+                        <div class="relative group">
+                            <select id="speedSelect" onchange="setSpeed(this.value)" class="bg-white/20 hover:bg-white/30 text-white rounded-full py-1 pl-3 pr-8 appearance-none transition text-sm cursor-pointer border border-transparent focus:border-white focus:ring-0">
+                                <option value="0.5" class="bg-black text-white">0.5x</option>
+                                <option value="0.75" class="bg-black text-white">0.75x</option>
+                                <option value="1.0" class="bg-black text-white" selected>Normal</option>
+                                <option value="1.25" class="bg-black text-white">1.25x</option>
+                                <option value="1.5" class="bg-black text-white">1.5x</option>
+                                <option value="2.0" class="bg-black text-white">2.0x</option>
+                            </select>
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down"><path d="m6 9 6 6 6-6"/></svg>
+                            </div>
+                        </div>
+
+                        
+                        <button id="loopBtn" onclick="toggleLoop()" class="p-2 rounded-full bg-white/20 hover:bg-white/30 transition text-white" title="Toggle Loop" draggable="false">
+                            <svg id="loopIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-repeat text-gray-400"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        
+<div id="messageBox" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 p-3 bg-red-800 text-red-100 rounded-lg hidden"></div>
+
+    </main>
+    
+    
+<nav id="bottomNav" class="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-2xl transition-transform duration-300 transform translate-y-0 md:hidden">
+        <div class="flex justify-around items-center h-16 w-full max-w-lg mx-auto">
+            
+<a href="https://your-developer-website.com" target="_blank" class="nav-item" draggable="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <span class="mt-1">Developer</span>
+            </a>
+            
+<a href="https://your-app-store-link.com" target="_blank" class="nav-item" draggable="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package"><path d="m7.5 4.27 9 5.15"/><path d="M2.5 8.64 7.5 11.5l5.5-3.14"/><path d="M12.5 11.5 17.5 8.64 22.5 11.5"/><path d="m7.5 18.27 9-5.15"/><path d="M12.5 15.36 17.5 18.27 22.5 15.36"/><path d="M2.5 15.36 7.5 12.5l5.5 3.14"/></svg>
+                <span class="mt-1">App Store</span>
+            </a>
+            
+<button onclick="copyLink()" class="nav-item" draggable="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+                <span class="mt-1">Share App</span>
+            </button>
+            
+<button onclick="toggleMobileMenu(true)" class="nav-item" draggable="false">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                <span class="mt-1">More</span>
+            </button>
+        </div>
+    </nav>
+    
+    
+<footer id="appFooter" class="text-center p-4 text-sm text-gray-600 md:hidden">
+        <p>@all rights reserved.</p>
+    </footer>
+    
+    
+<div id="rightSidebar" class="fixed top-0 right-0 z-50 h-full w-80 max-w-full bg-white shadow-2xl transform translate-x-full transition-transform duration-300 hidden md:block">
+        <div class="p-6 h-full flex flex-col">
+            
+<div class="flex justify-between items-center pb-4 mb-4 border-b border-gray-200">
+                <h3 class="text-xl font-bold text-gray-900">Navigation</h3>
+                <button onclick="toggleRightSidebar()" class="text-gray-500 hover:text-gray-900 p-2 rounded-full hover:bg-gray-100">
+                    
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+            </div>
+            
+<ul class="flex-grow space-y-1">
+                
+<li><a href="https://your-developer-website.com" target="_blank" onclick="toggleRightSidebar()" class="w-full flex items-center space-x-3 py-3 px-2 text-base rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition" draggable="false">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span>Know the Developer</span>
+                </a></li>
+                
+<li><a href="https://your-app-store-link.com" target="_blank" onclick="toggleRightSidebar()" class="w-full flex items-center space-x-3 py-3 px-2 text-base rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition" draggable="false">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package"><path d="m7.5 4.27 9 5.15"/><path d="M2.5 8.64 7.5 11.5l5.5-3.14"/><path d="M12.5 11.5 17.5 8.64 22.5 11.5"/><path d="m7.5 18.27 9-5.15"/><path d="M12.5 15.36 17.5 18.27 22.5 15.36"/><path d="M2.5 15.36 7.5 12.5l5.5 3.14"/></svg>
+                    <span>Visit App Store</span>
+                </a></li>
+                
+<li><button onclick="copyLink(); toggleRightSidebar();" class="w-full flex items-center space-x-3 py-3 px-2 text-base rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition" draggable="false">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+                    <span>Share App (Copy Link)</span>
+                </button></li>
+            </ul>
+
+            
+<div class="pt-4 mt-auto border-t border-gray-200">
+                <p class="text-sm font-semibold text-gray-500 mb-2">Policies & Info</p>
+                <ul class="space-y-1 text-sm">
+                    <li><button onclick="toggleRightSidebar(); showView('termsView')" class="w-full text-left py-2 px-2 rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition">Terms of Service</button></li>
+                    <li><button onclick="toggleRightSidebar(); showView('privacyView')" class="w-full text-left py-2 px-2 rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition">Privacy Policy</button></li>
+                    <li><button onclick="toggleRightSidebar(); showView('contactView')" class="w-full text-left py-2 px-2 rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition">Contact Us</button></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Slide-Up Menu Sheet (Visible on Mobile only, Z-index 50) -->
+    <div id="mobileMenuSheet" class="mobile-sheet-overlay md:hidden" onclick="toggleMobileMenu(false)">
+        <!-- Panel (Stop propagation to prevent the click from closing the menu immediately) -->
+        <div id="mobileMenuPanel" class="mobile-sheet-panel absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div class="p-6">
+                <!-- Header -->
+                <div class="flex justify-between items-center pb-4 border-b border-gray-200 mb-2">
+                    <h3 class="text-xl font-bold text-gray-900">Policies & Info</h3>
+                    <button onclick="toggleMobileMenu(false)" class="text-gray-500 hover:text-gray-900 p-2 rounded-full hover:bg-gray-100" draggable="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
+                </div>
+                <!-- Links -->
+                <ul class="space-y-1">
+                    <li><button onclick="navigateAndClose('termsView')" class="w-full text-left py-3 px-2 rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition flex items-center space-x-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-clipboard-list"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M10 9h6"/><path d="M10 14h6"/><path d="M10 19h6"/></svg>
+                        <span>Terms of Service</span>
+                    </button></li>
+                    <li><button onclick="navigateAndClose('privacyView')" class="w-full text-left py-3 px-2 rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition flex items-center space-x-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield-half"><path d="M20 13c0 5-5 9-8 9s-8-4-8-9V5l8-3 8 3z"/></svg>
+                        <span>Privacy Policy</span>
+                    </button></li>
+                    <li><button onclick="navigateAndClose('contactView')" class="w-full text-left py-3 px-2 rounded-lg hover:bg-gray-50 hover:text-[#ee6912] transition flex items-center space-x-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mail"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.83 1.83 0 0 1-2.06 0L2 7"/></svg>
+                        <span>Contact Us</span>
+                    </button></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- CONSTANTS ---
+        const shareUrl = 'https://muneer-iqbal.com/privateplayer'; // The link to share
+        
+        // --- ELEMENT REFERENCES ---
+        const videoPlayer = document.getElementById('videoPlayer');
+        const selectionView = document.getElementById('selectionView');
+        const playerView = document.getElementById('playerView');
+        const donutView = document.getElementById('donutView');
+        const termsView = document.getElementById('termsView'); 
+        const privacyView = document.getElementById('privacyView'); 
+        const contactView = document.getElementById('contactView'); 
+        const messageBox = document.getElementById('messageBox');
+
+        // Custom Player Controls
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playIcon = document.getElementById('playIcon');
+        const pauseIcon = document.getElementById('pauseIcon');
+        const stopBtn = document.getElementById('stopBtn');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const muteBtn = document.getElementById('muteBtn');
+        const volumeHighIcon = document.getElementById('volumeHighIcon');
+        const volumeMuteIcon = document.getElementById('volumeMuteIcon');
+        const speedSelect = document.getElementById('speedSelect');
+        const loopBtn = document.getElementById('loopBtn');
+        const loopIcon = document.getElementById('loopIcon');
+        const progressBar = document.getElementById('progressBar');
+        const timeDisplay = document.getElementById('timeDisplay');
+        
+        // New Control Elements
+        const videoFileInput = document.getElementById('videoFileInput');
+        const videoTitleSpan = document.getElementById('videoTitle');
+        const pipBtn = document.getElementById('pipBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const fullscreenIcon = document.getElementById('fullscreenIcon');
+        const fullscreenExitIcon = document.getElementById('fullscreenExitIcon');
+        const captionFileInput = document.getElementById('captionFileInput');
+        
+        // Structural elements
+        const appHeader = document.getElementById('appHeader');
+        const appMain = document.getElementById('appMain');
+        const appFooter = document.getElementById('appFooter'); // Mobile only
+        const bottomNav = document.getElementById('bottomNav'); // Mobile only
+
+        // Dynamic header elements
+        const donutLinkHeader = document.getElementById('donutLinkHeader');
+        const fileInputContainerHeader = document.getElementById('fileInputContainerHeader');
+        const backToPlayerHeaderBtn = document.getElementById('backToPlayerHeaderBtn');
+        
+        // Sidebar elements (Desktop)
+        const rightSidebar = document.getElementById('rightSidebar');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        let isSidebarOpen = false;
+
+        // Mobile Menu Sheet elements
+        const mobileMenuSheet = document.getElementById('mobileMenuSheet');
+        const mobileMenuPanel = document.getElementById('mobileMenuPanel');
+
+        // Currency specific buttons
+        const usdButtons = document.getElementById('usdButtons');
+        const inrButtons = document.getElementById('inrButtons');
+        const currencySelector = document.getElementById('currency-selector');
+
+        let lastVolume = 1; // Used for toggling mute
+        let currentCaptionTrack = null; // Stores the dynamically added <track> element
+        
+        // --- NEW STATE VARIABLE for ROTATION ---
+        let currentRotation = 0; // Tracks the rotation angle (0, 90, 180, 270)
+        
+        // --- Video Control Functions ---
+
+        /**
+         * Converts seconds to MM:SS or HH:MM:SS format.
+         * @param {number} seconds - The time in seconds.
+         * @returns {string} Formatted time string.
+         */
+        function formatTime(seconds) {
+            const date = new Date(null);
+            date.setSeconds(seconds);
+            const timeString = date.toISOString().substr(11, 8); // Gets HH:MM:SS
+            // If hours are 00, remove them (e.g., 00:01:23 -> 01:23)
+            if (timeString.startsWith('00:')) {
+                return timeString.substring(3);
+            }
+            return timeString; // Return HH:MM:SS
+        }
+
+        /**
+         * Toggles between play and pause states.
+         */
+        function togglePlayPause() {
+            if (videoPlayer.paused || videoPlayer.ended) {
+                videoPlayer.play();
+            } else {
+                videoPlayer.pause();
+            }
+            updatePlayPauseIcon();
+        }
+
+        /**
+         * Stops the video and resets playback position to the start.
+         */
+        function stopVideo() {
+            videoPlayer.pause();
+            videoPlayer.currentTime = 0;
+            updatePlayPauseIcon();
+            updateTimeDisplay();
+        }
+
+        /**
+         * Sets the video volume based on the slider input.
+         * @param {string} value - The volume level (0.0 to 1.0).
+         */
+        function setVolume(value) {
+            videoPlayer.volume = parseFloat(value);
+            if (videoPlayer.volume > 0) {
+                lastVolume = videoPlayer.volume;
+            }
+            updateVolumeIcon();
+        }
+
+        /**
+         * Toggles between mute and last-known volume.
+         */
+        function toggleMute() {
+            if (videoPlayer.volume > 0) {
+                lastVolume = videoPlayer.volume; // Save current volume
+                videoPlayer.volume = 0;
+                volumeSlider.value = 0;
+            } else {
+                videoPlayer.volume = lastVolume; // Restore saved volume
+                volumeSlider.value = lastVolume;
+            }
+            updateVolumeIcon();
+        }
+
+        /**
+         * Sets the video playback rate (speed).
+         * @param {string} value - The playback rate (e.g., '1.0').
+         */
+        function setSpeed(value) {
+            videoPlayer.playbackRate = parseFloat(value);
+        }
+
+        /**
+         * Toggles the video loop attribute.
+         */
+        function toggleLoop() {
+            videoPlayer.loop = !videoPlayer.loop;
+            updateLoopIcon();
+            displayMessage(videoPlayer.loop ? 'Video looping enabled.' : 'Video looping disabled.', 'info');
+        }
+        
+        /**
+         * Toggles Picture-in-Picture mode.
+         */
+        function togglePictureInPicture() {
+            if (!document.pictureInPictureEnabled) {
+                 displayMessage('PiP not supported on this browser.', 'error');
+                 return;
+            }
+
+            if (document.pictureInPictureElement) {
+                document.exitPictureInPicture();
+            } else if (videoPlayer.readyState >= 1) { // Check if video metadata is loaded
+                videoPlayer.requestPictureInPicture().catch(e => {
+                    displayMessage('PiP failed or was denied.', 'error');
+                    console.error('PiP request failed:', e);
+                });
+            } else {
+                displayMessage('Cannot enable PiP yet (video not ready).', 'info');
+            }
+        }
+        
+        /**
+         * Toggles fullscreen mode for the player container.
+         */
+        function toggleFullscreen() {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                // Request fullscreen on the player container (playerView)
+                playerView.requestFullscreen().catch(e => {
+                    displayMessage('Fullscreen denied by browser.', 'error');
+                    console.error('Fullscreen request failed:', e);
+                });
+            }
+        }
+        
+        /**
+         * Loads a .vtt caption file and adds it as a track to the video.
+         * @param {Event} event The file change event.
+         */
+        function loadCaptions(event) {
+            const file = event.target.files[0];
+            if (!file || !file.name.toLowerCase().endsWith('.vtt')) {
+                displayMessage('Please select a valid .vtt subtitle file.', 'error');
+                event.target.value = '';
+                return;
+            }
+
+            // 1. Remove existing track if any and revoke its URL
+            if (currentCaptionTrack) {
+                const captionUrl = currentCaptionTrack.src;
+                videoPlayer.removeChild(currentCaptionTrack);
+                URL.revokeObjectURL(captionUrl);
+                currentCaptionTrack = null;
+            }
+
+            // 2. Create a temporary URL for the VTT file
+            const fileURL = URL.createObjectURL(file);
+            
+            // 3. Create and configure the <track> element
+            const track = document.createElement('track');
+            track.kind = 'subtitles';
+            track.label = file.name.replace('.vtt', '');
+            track.srclang = 'en'; 
+            track.src = fileURL;
+            track.default = true; // Make it active by default
+
+            videoPlayer.appendChild(track);
+            currentCaptionTrack = track;
+
+            displayMessage(`Subtitles loaded: ${file.name}.`, 'success');
+            event.target.value = ''; // Clear input for future selections
+        }
+
+        /**
+         * Rotates the video player 90 degrees clockwise and updates CSS transform.
+         */
+        function rotateVideo() {
+            // Cycle rotation: 0 -> 90 -> 180 -> 270 -> 0
+            currentRotation = (currentRotation + 90) % 360; 
+            
+            // Apply rotation transformation
+            videoPlayer.style.transform = `rotate(${currentRotation}deg)`;
+
+            // Inform user of the rotation
+            displayMessage(`Video rotated ${currentRotation}° clockwise.`, 'info');
+        }
+
+
+        // --- UI Update Functions ---
+
+        /**
+         * Updates the play/pause button icon based on video state.
+         */
+        function updatePlayPauseIcon() {
+            if (videoPlayer.paused || videoPlayer.ended) {
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+            } else {
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Updates the volume icon and slider based on video volume/mute state.
+         */
+        function updateVolumeIcon() {
+            if (videoPlayer.volume > 0 && !videoPlayer.muted) {
+                volumeHighIcon.classList.remove('hidden');
+                volumeMuteIcon.classList.add('hidden');
+                volumeSlider.value = videoPlayer.volume;
+            } else {
+                volumeHighIcon.classList.add('hidden');
+                volumeMuteIcon.classList.remove('hidden');
+                // Don't set slider value to 0 if muted property is set but volume is high
+                if (videoPlayer.volume === 0) {
+                    volumeSlider.value = 0;
+                }
+            }
+        }
+
+        /**
+         * Updates the loop button color based on the loop state.
+         */
+        function updateLoopIcon() {
+            if (videoPlayer.loop) {
+                loopIcon.classList.add('text-[#ee6912]'); // Highlight color
+                loopIcon.classList.remove('text-gray-400');
+            } else {
+                loopIcon.classList.remove('text-[#ee6912]');
+                loopIcon.classList.add('text-gray-400');
+            }
+        }
+        
+        /**
+         * Updates the fullscreen icon based on the document's fullscreen state.
+         */
+        function updateFullscreenIcon() {
+            if (document.fullscreenElement) {
+                fullscreenIcon.classList.add('hidden');
+                fullscreenExitIcon.classList.remove('hidden');
+            } else {
+                fullscreenIcon.classList.remove('hidden');
+                fullscreenExitIcon.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Updates the progress bar and time display during playback.
+         */
+        function updateProgress() {
+            if (!isNaN(videoPlayer.duration)) {
+                const percentage = (videoPlayer.currentTime / videoPlayer.duration) * 100;
+                progressBar.value = percentage;
+                updateTimeDisplay();
+            }
+        }
+
+        /**
+         * Updates the current time and total duration display.
+         */
+        function updateTimeDisplay() {
+            if (!isNaN(videoPlayer.duration)) {
+                timeDisplay.textContent = `${formatTime(videoPlayer.currentTime)} / ${formatTime(videoPlayer.duration)}`;
+            } else {
+                timeDisplay.textContent = '00:00 / 00:00';
+            }
+        }
+
+        // --- Event Handlers for Custom Controls ---
+
+        /**
+         * Handles seeking when the progress bar is used.
+         */
+        function handleSeek() {
+            if (!isNaN(videoPlayer.duration)) {
+                const seekTime = videoPlayer.duration * (progressBar.value / 100);
+                videoPlayer.currentTime = seekTime;
+            }
+        }
+
+        // Event Listeners for video state changes (must be initialized after videoPlayer object is ready)
+        videoPlayer.addEventListener('loadedmetadata', () => {
+            updateProgress();
+            videoPlayer.playbackRate = parseFloat(speedSelect.value); // Set initial speed
+            pipBtn.disabled = false; // Enable PiP once metadata is loaded
+        });
+        videoPlayer.addEventListener('timeupdate', updateProgress);
+        videoPlayer.addEventListener('play', updatePlayPauseIcon);
+        videoPlayer.addEventListener('pause', updatePlayPauseIcon);
+        videoPlayer.addEventListener('volumechange', updateVolumeIcon);
+        videoPlayer.addEventListener('ended', updatePlayPauseIcon);
+        
+        // NEW FEATURE: Click on the video player screen to toggle play/pause
+        videoPlayer.addEventListener('click', togglePlayPause);
+        
+        document.addEventListener('fullscreenchange', updateFullscreenIcon);
+        
+        // Event Listeners for Custom Controls
+        progressBar.addEventListener('change', handleSeek); // Seek when user releases thumb
+        progressBar.addEventListener('input', updateTimeDisplay); // Update time display while dragging
+        
+        // --- Sidebar/Desktop Nav Functions ---
+
+        /**
+         * Toggles the right sliding sidebar visibility for desktop users.
+         */
+        function toggleRightSidebar() {
+            isSidebarOpen = !isSidebarOpen;
+            
+            if (isSidebarOpen) {
+                // Open the sidebar
+                rightSidebar.classList.remove('translate-x-full');
+                sidebarBackdrop.classList.add('active');
+                // Prevent scrolling when sidebar is open
+                document.body.style.overflow = 'hidden'; 
+            } else {
+                // Close the sidebar
+                rightSidebar.classList.add('translate-x-full');
+                sidebarBackdrop.classList.remove('active');
+                // Restore scrolling
+                document.body.style.overflow = ''; 
+            }
+        }
+
+
+        // --- Mobile Menu Sheet Functions ---
+
+        /**
+         * Toggles the visibility of the mobile slide-up menu sheet.
+         * @param {boolean} show - True to show the menu, false to hide.
+         */
+        function toggleMobileMenu(show) {
+            if (show) {
+                mobileMenuSheet.classList.add('active');
+                mobileMenuPanel.classList.add('active');
+                // Prevent scrolling of body content
+                document.body.style.overflow = 'hidden';
+            } else {
+                mobileMenuPanel.classList.remove('active');
+                // Wait for slide transition (300ms) before hiding overlay
+                setTimeout(() => {
+                    mobileMenuSheet.classList.remove('active');
+                    document.body.style.overflow = '';
+                }, 300);
+            }
+        }
+
+        /**
+         * Helper function to navigate to a view and then close the mobile menu sheet.
+         * @param {string} viewId - The ID of the view to switch to.
+         */
+        function navigateAndClose(viewId) {
+            toggleMobileMenu(false); // Close the menu first
+            // Delay navigation slightly to allow smooth transition closure
+            setTimeout(() => {
+                showView(viewId);
+            }, 100); 
+        }
+
+
+        // --- Sharing Functions ---
+        
+        /**
+         * Copies the application link to the clipboard and shows a confirmation message.
+         */
+        function copyLink() {
+            const url = shareUrl;
+            // Use a temporary textarea to hold the text to copy
+            const tempInput = document.createElement('textarea');
+            tempInput.value = url;
+            // Append to document to make it selectable
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            
+            try {
+                // Use execCommand for broader compatibility in embedded environments
+                document.execCommand('copy');
+                displayMessage('App link copied to clipboard!', 'success');
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                displayMessage('Error: Could not copy link. Please copy manually.', 'error');
+            }
+            
+            // Remove the temporary element
+            document.body.removeChild(tempInput);
+        }
+
+
+        // --- Utility Functions ---
+
+        /**
+         * Clears and hides the message box.
+         */
+        function clearMessage() {
+            messageBox.textContent = '';
+            messageBox.classList.add('hidden');
+        }
+
+        /**
+         * Displays a temporary message in the dedicated message box.
+         * @param {string} message The message to display.
+         * @param {string} type The type of message ('success', 'error', 'info').
+         */
+        function displayMessage(message, type = 'info') {
+            clearMessage();
+            messageBox.innerHTML = message;
+            messageBox.classList.remove('hidden');
+
+            // Apply styling based on type
+            messageBox.classList.remove('bg-red-800', 'bg-green-800', 'bg-blue-800');
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-800');
+            } else if (type === 'success') {
+                messageBox.classList.add('bg-green-800');
+            } else {
+                messageBox.classList.add('bg-blue-800');
+            }
+
+            // Hide the message after a few seconds
+            setTimeout(clearMessage, 5000);
+        }
+        
+        /**
+         * Switches the displayed donation buttons based on the selected currency.
+         * @param {string} currency 'usd' or 'inr'
+         */
+        function setCurrency(currency) {
+            if (currency === 'inr') {
+                usdButtons.classList.add('hidden');
+                usdButtons.classList.remove('flex');
+                inrButtons.classList.remove('hidden');
+                inrButtons.classList.add('flex');
+            } else {
+                usdButtons.classList.remove('hidden');
+                usdButtons.classList.add('flex');
+                inrButtons.classList.add('hidden');
+                inrButtons.classList.remove('flex');
+            }
+        }
+        
+        /**
+         * Controls the visibility of the main UI views and structural elements.
+         * @param {string} viewId 'selectionView', 'playerView', 'donutView', 'termsView', 'privacyView, or 'contactView'
+         */
+        function showView(viewId) {
+            // Hide all main views first
+            selectionView.classList.add('hidden');
+            playerView.classList.add('hidden');
+            donutView.classList.add('hidden');
+            termsView.classList.add('hidden');
+            privacyView.classList.add('hidden');
+            contactView.classList.add('hidden');
+
+            // Reset structural elements visibility (Mobile is default, Desktop is hidden via md:hidden)
+            appHeader.classList.remove('hidden');
+            appFooter.classList.remove('hidden'); 
+            bottomNav.classList.remove('hidden'); 
+
+            // Reset header button visibility
+            donutLinkHeader.classList.add('hidden');
+            fileInputContainerHeader.classList.add('hidden');
+            backToPlayerHeaderBtn.classList.add('hidden');
+            
+            // Ensure sidebar is closed when switching main views
+            if (isSidebarOpen) { toggleRightSidebar(); }
+
+            // Default state for standard views
+            document.body.classList.remove('p-0', 'overflow-hidden', 'bg-black');
+            document.body.classList.add('bg-white');
+            appMain.classList.remove('absolute', 'inset-0', 'p-0');
+            // Ensure appMain has its bottom padding for the mobile nav bar
+            appMain.classList.add('flex-grow', 'max-w-7xl', 'mx-auto', 'p-4', 'md:p-8', 'pb-20', 'md:pb-0');
+            
+            // Ensure video is paused if switching away from player
+            if (viewId !== 'playerView' && videoPlayer && !videoPlayer.paused) {
+                 videoPlayer.pause();
+            }
+
+            // Handle View Transitions
+            if (viewId === 'selectionView') {
+                selectionView.classList.remove('hidden');
+                // Show default header buttons
+                donutLinkHeader.classList.remove('hidden');
+                fileInputContainerHeader.classList.remove('hidden');
+                
+                // --- Reset Rotation on leaving player view ---
+                currentRotation = 0;
+                videoPlayer.style.transform = `rotate(0deg)`;
+
+            } else if (viewId === 'playerView') {
+                // --- Activate Player View (Full-Screen Layout) ---
+                appHeader.classList.add('hidden');
+                appFooter.classList.add('hidden');
+                bottomNav.classList.add('hidden'); // Hide bottom nav in player view
+                clearMessage();
+                
+                // Set Body and Main Container to Full Screen/Full Width for Immersive view
+                document.body.classList.add('p-0', 'overflow-hidden', 'bg-black');
+                document.body.classList.remove('bg-white');
+
+                // Make the main wrapper also fullscreen
+                appMain.classList.add('absolute', 'inset-0', 'p-0');
+                appMain.classList.remove('flex-grow', 'max-w-7xl', 'mx-auto', 'p-4', 'md:p-8', 'pb-20', 'md:pb-0');
+                
+                playerView.classList.remove('hidden');
+            
+            } else if (['donutView', 'termsView', 'privacyView', 'contactView'].includes(viewId)) {
+                // --- Activate Donut/Policy Views (Standard Layout with Back Button) ---
+                document.getElementById(viewId).classList.remove('hidden');
+                
+                // Show ONLY the Back to Player button in header
+                backToPlayerHeaderBtn.classList.remove('hidden');
+                
+                // Ensure currency buttons are correctly set on view change for donutView
+                if (viewId === 'donutView') {
+                    setCurrency(currencySelector.value || 'usd');
+                }
+            }
+        }
+
+        /**
+         * Stops the current video, cleans up the URL, and switches back to the selection view.
+         */
+        function backToSelection() {
+            videoPlayer.pause();
+            
+            // Cleanup: Revoke the object URL to free resources
+            if (videoPlayer.dataset.oldUrl) {
+                URL.revokeObjectURL(videoPlayer.dataset.oldUrl);
+                videoPlayer.removeAttribute('src'); // Clear the src attribute
+                delete videoPlayer.dataset.oldUrl;
+            }
+            
+            // Cleanup caption track
+            if (currentCaptionTrack) {
+                const captionUrl = currentCaptionTrack.src;
+                videoPlayer.removeChild(currentCaptionTrack);
+                URL.revokeObjectURL(captionUrl);
+                currentCaptionTrack = null;
+            }
+
+            // Reset file input so the same file can be selected again if needed
+            videoFileInput.value = '';
+            
+            // Reset controls to default state
+            progressBar.value = 0;
+            updatePlayPauseIcon();
+            updateTimeDisplay();
+            pipBtn.disabled = true; // Disable PiP button
+            videoTitleSpan.textContent = ''; // Clear title
+            
+            // Reset rotation
+            currentRotation = 0;
+            videoPlayer.style.transform = `rotate(0deg)`;
+            
+            showView('selectionView');
+            displayMessage('Ready to choose a new video.', 'info');
+        }
+
+        /**
+         * Handles the file change event, loads the video, and switches to the player view.
+         * @param {Event} event The file change event.
+         */
+        function loadVideo(event) {
+            clearMessage();
+            const file = event.target.files[0];
+
+            if (!file) {
+                displayMessage('File selection cancelled.', 'info');
+                return;
+            }
+
+            if (!file.type.startsWith('video/')) {
+                displayMessage('Error: Selected file is not a video. Please choose a valid video format.', 'error');
+                event.target.value = '';
+                return;
+            }
+
+            try {
+                // 1. Create a temporary URL for the selected file
+                const fileURL = URL.createObjectURL(file);
+
+                // 2. Assign the URL to the video player's source and load
+                videoPlayer.src = fileURL;
+                videoPlayer.load();
+
+                // 3. Set the video title
+                videoTitleSpan.textContent = file.name;
+
+                // 4. Switch to the dedicated player view
+                showView('playerView');
+                
+                // 5. Attempt to play (browser may still restrict, showing controls instead)
+                videoPlayer.play().catch(e => {
+                    console.error("Autoplay prevented:", e);
+                });
+
+                // 6. Cleanup previous object URL if one existed
+                if (videoPlayer.dataset.oldUrl) {
+                    URL.revokeObjectURL(videoPlayer.dataset.oldUrl);
+                }
+                // Store the current URL for future cleanup
+                videoPlayer.dataset.oldUrl = fileURL;
+
+                // 7. Reset UI controls state
+                volumeSlider.value = videoPlayer.volume;
+                lastVolume = videoPlayer.volume;
+                updateVolumeIcon();
+                updateLoopIcon();
+                
+            } catch (error) {
+                console.error("Error loading video:", error);
+                displayMessage('An unexpected error occurred while trying to load the video.', 'error');
+                showView('selectionView'); // Revert to selection view on error
+                videoFileInput.value = '';
+            }
+        }
+        
+        // --- Initialization and Event Listeners ---
+        
+        // Disable right-click context menu, silently
+        document.addEventListener('contextmenu', function(event) {
+            event.preventDefault();
+        }, false);
+
+        /**
+         * Prevents keyboard and mouse wheel zooming (Ctrl/Cmd + scroll/+/-) for a locked experience.
+         * @param {Event} event 
+         */
+        function preventZoom(event) {
+            // Check for Ctrl or Command key and prevent the default action for zooming events
+            if (event.ctrlKey || event.metaKey) {
+                if (event.type === 'wheel') {
+                    // Prevent scroll wheel zoom
+                    event.preventDefault();
+                }
+                if (event.type === 'keydown' && (event.key === '+' || event.key === '-' || event.key === '0')) {
+                    // Prevent keyboard zoom (+, -, and reset zoom 0)
+                    event.preventDefault();
+                }
+            }
+        }
+        
+        // Add global listeners for zoom prevention
+        document.addEventListener('keydown', preventZoom, false);
+        // Note: setting passive: false is necessary for event.preventDefault() to work on wheel
+        document.addEventListener('wheel', preventZoom, { passive: false });
+
+        // Ensure proper cleanup when the page is unloaded
+        window.addEventListener('beforeunload', () => {
+            if (videoPlayer.dataset.oldUrl) {
+                URL.revokeObjectURL(videoPlayer.dataset.oldUrl);
+            }
+             if (currentCaptionTrack) {
+                URL.revokeObjectURL(currentCaptionTrack.src);
+            }
+        });
+
+        // Initialize currency display and view on load
+        document.addEventListener('DOMContentLoaded', () => {
+            setCurrency(currencySelector.value || 'usd');
+            showView('selectionView'); // Ensure initial view is correct
+        });
+    </script>
+</body>
+</html>
